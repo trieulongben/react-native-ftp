@@ -115,6 +115,9 @@ dependencies {
   //noinspection GradleDynamicVersion
   implementation "com.facebook.react:react-native:+"
   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+  // https://mvnrepository.com/artifact/commons-net/commons-net
+  implementation("commons-net:commons-net:3.11.1")
+
 }
 
 if (isNewArchitectureEnabled()) {

@@ -1,4 +1,5 @@
 import { NativeModules, Platform } from 'react-native';
+import type { TListResult } from './type';
 
 const LINKING_ERROR =
   `The package 'react-native-ftp' doesn't seem to be linked. Make sure: \n\n` +
@@ -24,6 +25,41 @@ const Ftp = FtpModule
       }
     );
 
-export function multiply(a: number, b: number): Promise<number> {
-  return Ftp.multiply(a, b);
+export function setup(
+  ipAddress: string,
+  port: number,
+  username: string,
+  password: string
+): Promise<void> {
+  return Ftp.setup(ipAddress, port, username, password);
+}
+
+export function list(path: string): Promise<TListResult> {
+  return Ftp.list(path);
+}
+
+export function remove(path: string): Promise<boolean> {
+  return Ftp.remove(path);
+}
+
+export function uploadFile(
+  path: string,
+  remoteDestinationPath: string
+): Promise<boolean> {
+  return Ftp.uploadFile(path, remoteDestinationPath);
+}
+
+export function cancelUploadFile(path: string): Promise<boolean> {
+  return Ftp.cancelUploadFile(path);
+}
+
+export function downloadFile(
+  path: string,
+  remoteDestinationPath: string
+): Promise<boolean> {
+  return Ftp.downloadFile(path, remoteDestinationPath);
+}
+
+export function cancelDownloadFile(token: string): Promise<boolean> {
+  return Ftp.cancelDownloadFile(token);
 }
