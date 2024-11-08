@@ -1,5 +1,5 @@
 {
-  "name": "react-native-ftp",
+  "name": "rn-ftp-client",
   "version": "0.1.0",
   "description": "react-native-ftp new arch",
   "source": "./src/index.tsx",
