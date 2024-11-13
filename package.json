@@ -1,6 +1,6 @@
 {
   "name": "rn-ftp-client",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "react-native-ftp new arch",
   "source": "./src/index.tsx",
   "main": "./lib/commonjs/index.js",

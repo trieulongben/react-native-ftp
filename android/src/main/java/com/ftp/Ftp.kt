@@ -1,6 +1,7 @@
 package com.ftp
 
 
+import android.annotation.SuppressLint
 import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -10,6 +11,13 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.apache.commons.net.ftp.FTP
 import org.apache.commons.net.ftp.FTPClient
 import org.apache.commons.net.ftp.FTPFile
@@ -24,6 +32,10 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.TimeZone
 
+val myPluginScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+
+
 class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(
     reactContext
@@ -32,8 +44,8 @@ class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
   private var port = 0
   private var username: String? = null
   private var password: String? = null
-  private val uploadingTasks = HashMap<String, Thread>()
-  private val downloadingTasks = HashMap<String, Thread>()
+  private val uploadingTasks = HashMap<String, Job>()
+  private val downloadingTasks = HashMap<String, Job>()
 
   @ReactMethod
   fun setup(ip_address: String?, port: Int, username: String?, password: String?) {
@@ -88,9 +100,19 @@ class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
     return sdf.format(date)
   }
 
+  private fun launchCoroutine(onError:(message:String)->Unit,block: suspend CoroutineScope.() -> Unit): Job {
+    val handler = CoroutineExceptionHandler { _, exception ->
+      onError(exception.message.toString())
+      println("CoroutineExceptionHandler got $exception")
+    }
+  return  myPluginScope.launch(handler) {
+     block()
+    }
+  }
+
   @ReactMethod
   fun list(path: String?, promise: Promise) {
-    Thread {
+    launchCoroutine(onError = { promise.reject(RNFTPCLIENT_ERROR_CODE_LIST, it) }) {
       val files: Array<FTPFile?>
       val client = FTPClient()
       try {
@@ -111,13 +133,13 @@ class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
       } finally {
         logout(client)
       }
-    }.start()
+    }
   }
 
   //remove file or dir
   @ReactMethod
   fun remove(path: String, promise: Promise) {
-    Thread {
+    launchCoroutine(onError = { promise.reject(RNFTPCLIENT_ERROR_CODE_REMOVE, it) }) {
       val client: FTPClient = FTPClient()
       try {
         login(client)
@@ -132,7 +154,7 @@ class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
       } finally {
         logout(client)
       }
-    }.start()
+    }
   }
 
   private fun makeToken(path: String, remoteDestinationDir: String): String {
@@ -178,8 +200,8 @@ class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
       promise.reject(RNFTPCLIENT_ERROR_CODE_UPLOAD, "has reach max uploading tasks")
       return
     }
-    val t =
-      Thread {
+    val job =
+      launchCoroutine(onError = { promise.reject(RNFTPCLIENT_ERROR_CODE_UPLOAD, it) }) {
         val client = FTPClient()
         try {
           login(client)
@@ -200,7 +222,7 @@ class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
           Log.d(TAG, "Resolve token:$token")
           var lastPercentage = 0
           while ((inputStream.read(bytesIn)
-              .also { read = it }) != -1 && !Thread.currentThread().isInterrupted
+              .also { read = it }) != -1 && isActive
           ) {
             outputStream.write(bytesIn, 0, read)
             finishBytes += read.toLong()
@@ -215,7 +237,7 @@ class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
           Log.d(TAG, "Finish uploading")
 
           //if not interrupted
-          if (!Thread.currentThread().isInterrupted) {
+          if (isActive) {
             val done: Boolean = client.completePendingCommand()
 
             if (done) {
@@ -241,33 +263,36 @@ class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
           logout(client)
         }
       }
-    t.start()
-    uploadingTasks[token] = t
+    uploadingTasks[token] = job
   }
 
   @ReactMethod
-  fun cancelUploadFile(token: String, promise: Promise) {
+   fun cancelUploadFile(token: String, promise: Promise) {
+
+
     val upload = uploadingTasks[token]
 
     if (upload == null) {
       promise.reject(RNFTPCLIENT_ERROR_CODE_UPLOAD, "token is wrong")
       return
     }
-    upload.interrupt()
-    val client: FTPClient = FTPClient()
-    try {
-      upload.join()
-      login(client)
-      val remoteFile = token.split("=>".toRegex()).dropLastWhile { it.isEmpty() }
-        .toTypedArray()[1]
-      client.deleteFile(remoteFile)
-    } catch (e: Exception) {
-      Log.d(TAG, "cancel upload error", e)
-    } finally {
-      logout(client)
+    launchCoroutine(onError = { promise.reject(RNFTPCLIENT_ERROR_CODE_CANCELUPLOAD, it) }) {
+      upload.cancel()
+      val client = FTPClient()
+      try {
+        upload.join()
+        login(client)
+        val remoteFile = token.split("=>".toRegex()).dropLastWhile { it.isEmpty() }
+          .toTypedArray()[1]
+        client.deleteFile(remoteFile)
+      } catch (e: Exception) {
+        Log.d(TAG, "cancel upload error", e)
+      } finally {
+        logout(client)
+      }
+      uploadingTasks.remove(token)
+      promise.resolve(true)
     }
-    uploadingTasks.remove(token)
-    promise.resolve(true)
   }
 
   private fun getLocalFilePath(path: String, remotePath: String): String {
@@ -296,6 +321,8 @@ class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
     return response[1].toLong()
   }
 
+
+
   @ReactMethod
   fun downloadFile(path: String, remoteDestinationPath: String, promise: Promise) {
     val token = makeDownloadToken(path, remoteDestinationPath)
@@ -313,8 +340,8 @@ class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
     }
 
     val t =
-      Thread {
-        val client: FTPClient = FTPClient()
+      launchCoroutine(onError = { promise.reject(RNFTPCLIENT_ERROR_CODE_DOWNLOAD, it) }) {
+        val client = FTPClient()
         try {
           login(client)
           client.setFileType(FTP.BINARY_FILE_TYPE)
@@ -349,7 +376,7 @@ class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
           var lastPercentage = 0
 
           while ((inputStream.read(bytesIn)
-              .also { read = it }) != -1 && !Thread.currentThread().isInterrupted
+              .also { read = it }) != -1 && isActive
           ) {
             outputStream.write(bytesIn, 0, read)
             finishBytes += read.toLong()
@@ -364,7 +391,7 @@ class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
           Log.d(TAG, "Finish uploading")
 
           //if not interrupted
-          if (!Thread.currentThread().isInterrupted) {
+          if (isActive) {
             val done: Boolean = client.completePendingCommand()
 
             if (done) {
@@ -391,27 +418,28 @@ class RNFtpClientModule(private val reactContext: ReactApplicationContext) :
           logout(client)
         }
       }
-    t.start()
     downloadingTasks[token] = t
   }
 
   @ReactMethod
-  fun cancelDownloadFile(token: String, promise: Promise) {
+   fun cancelDownloadFile(token: String, promise: Promise) {
     val download = downloadingTasks[token]
 
     if (download == null) {
       promise.reject(RNFTPCLIENT_ERROR_CODE_DOWNLOAD, "token is wrong")
       return
     }
-    download.interrupt()
-    val client: FTPClient = FTPClient()
-    try {
-      download.join()
-    } catch (e: Exception) {
-      Log.d(TAG, "cancel download error", e)
+    launchCoroutine(onError = { promise.reject(ERROR_MESSAGE_CANCELLED, it) }) {
+      download.cancel()
+      val client: FTPClient = FTPClient()
+      try {
+        download.join()
+      } catch (e: Exception) {
+        Log.d(TAG, "cancel download error", e)
+      }
+      downloadingTasks.remove(token)
+      promise.resolve(true)
     }
-    downloadingTasks.remove(token)
-    promise.resolve(true)
   }
 
   override fun getName(): String {

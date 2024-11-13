@@ -1,22 +1,57 @@
-# react-native-ftp
 
-react-native-ftp new arch
+# rn-ftp-client
+React Native New Architecture - FTP client implementation for React Native (Android only), Coroutine inside.
++ 🐎 New Architecture
++ ⚡ Using light-weight thread
++ 🏎 Kotlin implement
+
+**_NOTE:_**  Android only
 
 ## Installation
 
-```sh
-npm install react-native-ftp
+### Adding the package
+
+#### npm
+
+```bash
+$ npm install rn-ftp-client
 ```
 
-## Usage
+#### yarn
 
+```bash
+$ yarn add rn-ftp-client
+```
 
-```js
-import { multiply } from 'react-native-ftp';
+### Example
 
-// ...
+```typescript
+import { setup, list, uploadFile, downloadFile } from 'rn-ftp-client';
 
-const result = await multiply(3, 7);
+  const _setUp = async () => {
+    setup(ip, 21, user, password).then((result) => {
+      console.log(result);
+    });
+  };
+
+  const _listFile = async () => {
+    const files = await list('.');
+    console.log('files' + files);
+    setResult(files);
+    return files;
+  };
+
+  const _uploadFile = async () => {
+    uploadFile('/sdcard/Download/testpic.png', './testpic.png')
+      .then((value) => console.log(value))
+      .catch((e) => console.log('error', e));
+  };
+
+  const _downloadFile = async () => {
+    downloadFile('/sdcard/Download/testpic4.png', './testpic.png').catch(
+      (e) => console.log('error', e)
+    );
+  };
 ```
 
 

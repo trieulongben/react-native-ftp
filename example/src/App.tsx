@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, Button } from 'react-native';
-import { setup, list, uploadFile, downloadFile } from 'react-native-ftp';
+import { setup, list, uploadFile, downloadFile } from 'rn-ftp-client';
 import { TListResult } from '../../src/type';
 
 // const ip = 'ftp.dlptest.com';
@@ -9,24 +9,24 @@ import { TListResult } from '../../src/type';
 // const password = 'rNrKYTX9g7z3RgJRmxWuGHbeu';
 
 const ip = 'eu-central-1.sftpcloud.io';
-const user = 'dbcfee62727846dda7dff78eec795603';
-const password = 'r2pbYXLUMsm2LvLivwihDokiEL9PuWJm';
+const user = '14e3ecc233444834aa1f475da6f5381c';
+const password = 'UaPItfNCsFl0WllXZvp1Y1CbL09Jueye';
 
 const fileNameUpload = 'testpic.png';
 const fileNameDownload = 'testpic2.png';
 
 export default function App() {
-  const [result, setResult] = useState ([]);
+  const [result, setResult] = useState([]);
 
   const _setUp = async () => {
     setup(ip, 21, user, password).then((result) => {
-      console.log('result123', result);
+      console.log(result);
     });
   };
 
   const _listFile = async () => {
     const files = await list('.');
-    console.log('files' + files)
+    console.log('files' + files);
     setResult(files);
     return files;
   };
@@ -38,15 +38,17 @@ export default function App() {
   };
 
   const _downloadFile = async () => {
-    downloadFile('/sdcard/Download/testpic2.png', './testpic.png');
+    downloadFile('/sdcard/Download/testpic4.png', './testpic.png').catch(
+      (e) => console.log('error123', e)
+    );
   };
 
   return (
     <View style={styles.container}>
       <Button title="setup" onPress={_setUp} />
       <Button title="list file" onPress={_listFile} />
-      {result.map((item)=>{
-        return <Text>{item.name}</Text>
+      {result.map((item) => {
+        return <Text>{item.name}</Text>;
       })}
       <Button title="upload" onPress={_uploadFile} />
       <Button title="download" onPress={_downloadFile} />
